@@ -122,3 +122,184 @@ Given que estoy en la pantalla de PPT
  When toco el ícono de leaderboard
  Then veo una pantalla/panel con totales: ganadas, perdidas, empatadas
  And los totales se actualizan tras cada partida
+
+
+Contrato API definitivo (Backend Spring Boot Kotlin)
+Endpoint
+GET /api/rps/play?move=ROCK|PAPER|SCISSORS
+move obligatorio
+
+
+move es case-insensitive recomendado (acepta rock, ROCK, Rock), pero el backend siempre responde normalizado en MAYÚSCULAS.
+
+
+Respuestas
+✅ 200 OK — Resultado de la ronda
+Response JSON
+{
+  "playerMove": "PAPER",
+  "serverMove": "ROCK",
+  "outcome": "WIN",
+  "message": "El papel envuelve a la piedra",
+  "rule": "PAPER_BEATS_ROCK",
+  "timestamp": "2026-02-07T18:30:00Z"
+}
+
+Semántica de campos
+playerMove: jugada del usuario (ROCK, PAPER, SCISSORS)
+
+
+serverMove: jugada del servidor (ROCK, PAPER, SCISSORS)
+
+
+outcome: WIN | LOSE | DRAW
+
+
+message: texto humano para UI
+
+
+rule: identificador estable para depurar / testear (muy útil en pruebas)
+
+
+timestamp: ISO-8601 UTC (opcional pero recomendado para trazabilidad)
+
+
+
+❌ 400 Bad Request — Error de validación
+Response JSON
+
+{
+  "errorCode": "INVALID_MOVE",
+  "message": "move debe ser uno de: ROCK, PAPER, SCISSORS",
+  "details": {
+    "received": "FIRE",
+    "expected": ["ROCK", "PAPER", "SCISSORS"]
+  },
+  "timestamp": "2026-02-07T18:30:00Z"
+}
+
+Códigos sugeridos:
+MISSING_MOVE
+
+
+INVALID_MOVE
+
+
+
+DTOs exactos (Kotlin) — Backend
+Enums (contrato)
+enum class RpsMove { ROCK, PAPER, SCISSORS }
+enum class RpsOutcome { WIN, LOSE, DRAW }
+
+// Identificador estable de la regla aplicada (sirve para tests/telemetría)
+enum class RpsRule {
+    DRAW,                 // mismo movimiento
+    ROCK_BEATS_SCISSORS,  // ROCK gana a SCISSORS
+    PAPER_BEATS_ROCK,     // PAPER gana a ROCK
+    SCISSORS_BEATS_PAPER  // SCISSORS gana a PAPER
+}
+
+Success DTO
+data class RpsPlayResponse(
+    val playerMove: RpsMove,
+    val serverMove: RpsMove,
+    val outcome: RpsOutcome,
+    val message: String,
+    val rule: RpsRule,
+    val timestamp: String // ISO-8601, ej. Instant.now().toString()
+)
+
+Error DTO
+data class ApiErrorResponse(
+    val errorCode: String,
+    val message: String,
+    val details: Map<String, Any>? = null,
+    val timestamp: String
+)
+
+Nota de “arquitectura con cerebro”: rule te ahorra dolores. Puedes testear por rule en vez de comparar strings del message (que cambia fácil).
+
+DTOs exactos (Kotlin) — Frontend Android
+En Android usa los mismos nombres para evitar mapping raro. Si usas Kotlin serialization o Gson/Moshi, esto es directo:
+enum class RpsMove { ROCK, PAPER, SCISSORS }
+enum class RpsOutcome { WIN, LOSE, DRAW }
+enum class RpsRule { DRAW, ROCK_BEATS_SCISSORS, PAPER_BEATS_ROCK, SCISSORS_BEATS_PAPER }
+
+data class RpsPlayResponse(
+    val playerMove: RpsMove,
+    val serverMove: RpsMove,
+    val outcome: RpsOutcome,
+    val message: String,
+    val rule: RpsRule,
+    val timestamp: String
+)
+
+data class ApiErrorResponse(
+    val errorCode: String,
+    val message: String,
+    val details: Map<String, Any>? = null,
+    val timestamp: String
+)
+
+Matriz de reglas 3x3 (cobertura total)
+
+Filas = jugada del usuario
+ Columnas = jugada del servidor
+Player \ Server
+ROCK
+PAPER
+SCISSORS
+ROCK
+DRAW (DRAW)
+LOSE (PAPER_BEATS_ROCK)
+WIN (ROCK_BEATS_SCISSORS)
+PAPER
+WIN (PAPER_BEATS_ROCK)
+DRAW (DRAW)
+LOSE (SCISSORS_BEATS_PAPER)
+SCISSORS
+LOSE (ROCK_BEATS_SCISSORS)
+WIN (SCISSORS_BEATS_PAPER)
+DRAW (DRAW)
+
+
+Mensajes “humanos” (por regla)
+DRAW → “Empate: ambos eligieron {move}”
+
+
+ROCK_BEATS_SCISSORS → “La piedra rompe las tijeras”
+
+
+PAPER_BEATS_ROCK → “El papel envuelve a la piedra”
+
+
+SCISSORS_BEATS_PAPER → “Las tijeras cortan el papel”
+
+Casos de prueba mínimos (9 combinaciones)
+Para tu reporte / README, puedes listar así:
+ROCK vs ROCK → DRAW / DRAW
+
+
+ROCK vs PAPER → LOSE / PAPER_BEATS_ROCK
+
+
+ROCK vs SCISSORS → WIN / ROCK_BEATS_SCISSORS
+
+
+PAPER vs ROCK → WIN / PAPER_BEATS_ROCK
+
+
+PAPER vs PAPER → DRAW / DRAW
+
+
+PAPER vs SCISSORS → LOSE / SCISSORS_BEATS_PAPER
+
+
+SCISSORS vs ROCK → LOSE / ROCK_BEATS_SCISSORS
+
+
+SCISSORS vs PAPER → WIN / SCISSORS_BEATS_PAPER
+
+
+SCISSORS vs SCISSORS → DRAW / DRAW
+
